@@ -26,6 +26,7 @@ class ScriptGenerator:
         self, analysis: PageAnalysis, user_query: str, url: str
     ) -> str:
         pagination_section = self._format_pagination(analysis.pagination)
+        filter_section = self._format_filter_params(analysis.filter_params)
         return (
             "根据以下页面分析结果，生成一个 Python 数据抓取脚本。\n\n"
             "要求：\n"
@@ -37,6 +38,7 @@ class ScriptGenerator:
             "- 字段映射: {fields}\n"
             "- 页面类型: {page_type}\n"
             "{pagination}"
+            "{filter}"
             "只返回 Python 代码，不要其他内容。"
         ).format(
             url=url,
@@ -45,6 +47,7 @@ class ScriptGenerator:
             fields=analysis.fields,
             page_type=analysis.page_type,
             pagination=pagination_section,
+            filter=filter_section,
         )
 
     @staticmethod
@@ -58,6 +61,22 @@ class ScriptGenerator:
             "- 脚本必须包含翻页循环，自动抓取后续页面\n"
             "- 语义终止：根据用户查询推断何时停止翻页\n"
             "- 硬上限：最多 50 页\n"
+        )
+
+    @staticmethod
+    def _format_filter_params(filter_params) -> str:
+        if filter_params is None:
+            return ""
+        if filter_params.url_constructable:
+            return (
+                f"- 筛选方式: URL 参数筛选（url_constructable=True）\n"
+                f"- 筛选参数: {filter_params.params}\n"
+                "- 脚本应构造带筛选参数的 URL\n"
+            )
+        return (
+            f"- 筛选方式: 本地过滤（url_constructable=False）\n"
+            f"- 筛选参数: {filter_params.params}\n"
+            "- 脚本应全量抓取后本地过滤数据\n"
         )
 
     def _call_llm(self, prompt: str) -> str:

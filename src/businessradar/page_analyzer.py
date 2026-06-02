@@ -33,7 +33,11 @@ class PageAnalyzer:
             "  - type: 'url_param'（URL参数翻页）、'button'（下一页按钮）或 'js'（JS翻页）\n"
             "  - param_name: URL参数名（type为url_param时）\n"
             "  - selector: 翻页按钮的选择器（type为button或js时）\n"
-            "  - 如无翻页机制则为 null\n\n"
+            "  - 如无翻页机制则为 null\n"
+            "- filter_params: 筛选参数（如存在）:\n"
+            "  - url_constructable: 网站是否支持 URL 参数筛选\n"
+            "  - params: 筛选参数映射（如 date_range, category, region）\n"
+            "  - 如无筛选需求则为 null\n\n"
             "HTML:\n{html}"
         ).format(query=user_query, html=html)
 

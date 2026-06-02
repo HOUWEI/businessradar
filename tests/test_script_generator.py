@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 from businessradar.config import Config
-from businessradar.models import GeneratedScript, PageAnalysis, PaginationInfo
+from businessradar.models import GeneratedScript, PageAnalysis, PaginationInfo, FilterParams
 from businessradar.script_generator import ScriptGenerator
 
 
@@ -147,3 +147,47 @@ class TestScriptGeneratorButtonPagination:
         prompt = mock_llm.call_args[0][0]
         assert "button" in prompt
         assert "a.next-page" in prompt
+
+
+class TestScriptGeneratorFilterParams:
+    """ScriptGenerator passes filter params to LLM prompt."""
+
+    @patch("businessradar.script_generator.ScriptGenerator._call_llm")
+    def test_url_filter_in_prompt(self, mock_llm: MagicMock) -> None:
+        mock_llm.return_value = MOCK_LLM_SCRIPT
+
+        analysis = PageAnalysis(
+            list_item_selector="div.vT-s-result",
+            fields={"title": "a.title", "date": "span.date", "link": "a.title@href"},
+            page_type="static",
+            filter_params=FilterParams(
+                url_constructable=True,
+                params={"date_range": "2026-06-01", "category": "信息化"},
+            ),
+        )
+        gen = ScriptGenerator(_make_config())
+        gen.generate(analysis, "昨天的信息化采购公告", "https://example.com/list")
+
+        prompt = mock_llm.call_args[0][0]
+        assert "信息化" in prompt
+        assert "url_constructable" in prompt or "URL" in prompt
+
+    @patch("businessradar.script_generator.ScriptGenerator._call_llm")
+    def test_local_filter_fallback_in_prompt(self, mock_llm: MagicMock) -> None:
+        mock_llm.return_value = MOCK_LLM_SCRIPT
+
+        analysis = PageAnalysis(
+            list_item_selector="div.vT-s-result",
+            fields={"title": "a.title", "date": "span.date", "link": "a.title@href"},
+            page_type="static",
+            filter_params=FilterParams(
+                url_constructable=False,
+                params={"date_range": "2026-06-01"},
+            ),
+        )
+        gen = ScriptGenerator(_make_config())
+        gen.generate(analysis, "昨天的信息化采购公告", "https://example.com/list")
+
+        prompt = mock_llm.call_args[0][0]
+        # Should mention local filtering as fallback
+        assert "本地" in prompt or "local" in prompt or "过滤" in prompt

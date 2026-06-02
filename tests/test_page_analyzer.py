@@ -4,7 +4,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 from businessradar.config import Config
-from businessradar.models import PageAnalysis, PaginationInfo
+from businessradar.models import PageAnalysis, PaginationInfo, FilterParams
 from businessradar.page_analyzer import PageAnalyzer
 
 
@@ -106,3 +106,49 @@ class TestPageAnalyzerPromptIncludesPagination:
 
         prompt = mock_llm.call_args[0][0]
         assert "翻页" in prompt or "pagination" in prompt
+
+
+class TestFilterParamsAnalysis:
+    """PageAnalysis with filter params from LLM."""
+
+    @patch("businessradar.page_analyzer.PageAnalyzer._call_llm")
+    def test_url_filter_params(self, mock_llm: MagicMock) -> None:
+        mock_llm.return_value = json.dumps({
+            "list_item_selector": "div.vT-s-result",
+            "fields": {"title": "a.title", "date": "span.date", "link": "a.title@href"},
+            "page_type": "static",
+            "filter_params": {
+                "url_constructable": True,
+                "params": {"date_range": "2026-06-01", "category": "信息化"},
+            },
+        })
+
+        analyzer = PageAnalyzer(_make_config())
+        result = analyzer.analyze(SAMPLE_HTML, "昨天的信息化采购公告")
+
+        assert result.filter_params is not None
+        assert result.filter_params.url_constructable is True
+        assert result.filter_params.params["category"] == "信息化"
+
+    @patch("businessradar.page_analyzer.PageAnalyzer._call_llm")
+    def test_backward_compat_no_filter_params(self, mock_llm: MagicMock) -> None:
+        mock_llm.return_value = MOCK_LLM_RESPONSE
+
+        analyzer = PageAnalyzer(_make_config())
+        result = analyzer.analyze(SAMPLE_HTML, "昨天的信息化采购公告")
+
+        assert result.filter_params is None
+
+
+class TestPageAnalyzerPromptIncludesFilter:
+    """Prompt sent to LLM should ask about filter parameters."""
+
+    @patch("businessradar.page_analyzer.PageAnalyzer._call_llm")
+    def test_prompt_asks_about_filter_params(self, mock_llm: MagicMock) -> None:
+        mock_llm.return_value = MOCK_LLM_RESPONSE
+
+        analyzer = PageAnalyzer(_make_config())
+        analyzer.analyze(SAMPLE_HTML, "昨天的信息化采购公告")
+
+        prompt = mock_llm.call_args[0][0]
+        assert "筛选" in prompt or "filter" in prompt
