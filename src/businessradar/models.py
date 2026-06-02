@@ -12,12 +12,21 @@ class FetchResult(BaseModel):
     used_browser: bool = False
 
 
+class PaginationInfo(BaseModel):
+    """Pagination mechanism detected by LLM."""
+
+    type: Literal["url_param", "button", "js"]
+    selector: str | None = None
+    param_name: str | None = None
+
+
 class PageAnalysis(BaseModel):
     """LLM analysis of a page's HTML structure."""
 
     list_item_selector: str
     fields: dict[str, str]
     page_type: Literal["static", "dynamic"]
+    pagination: PaginationInfo | None = None
 
 
 class GeneratedScript(BaseModel):

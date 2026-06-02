@@ -28,7 +28,12 @@ class PageAnalyzer:
             "请返回 JSON 格式：\n"
             "- list_item_selector: 列表项的 CSS 选择器\n"
             "- fields: 字段名到 CSS 选择器的映射（必须包含 title, date, link）\n"
-            "- page_type: 'static' 或 'dynamic'\n\n"
+            "- page_type: 'static' 或 'dynamic'\n"
+            "- pagination: 翻页机制（如存在）:\n"
+            "  - type: 'url_param'（URL参数翻页）、'button'（下一页按钮）或 'js'（JS翻页）\n"
+            "  - param_name: URL参数名（type为url_param时）\n"
+            "  - selector: 翻页按钮的选择器（type为button或js时）\n"
+            "  - 如无翻页机制则为 null\n\n"
             "HTML:\n{html}"
         ).format(query=user_query, html=html)
 
