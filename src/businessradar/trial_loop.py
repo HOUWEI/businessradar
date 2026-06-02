@@ -2,11 +2,9 @@
 
 from collections.abc import Callable
 
-from businessradar.config import Config
 from businessradar.models import (
     Evaluation,
     FetchResult,
-    PageAnalysis,
     RunResult,
 )
 from businessradar.page_analyzer import PageAnalyzer
@@ -26,17 +24,20 @@ class TrialLoop:
 
     def __init__(
         self,
-        config: Config,
+        analyzer: PageAnalyzer,
+        generator: ScriptGenerator,
+        runner: ScriptRunner,
+        evaluator: ResultEvaluator,
         progress_callback: ProgressCallback | None = None,
         human_input_callback: HumanInputCallback | None = None,
     ) -> None:
-        self._config = config
+        self._analyzer = analyzer
+        self._generator = generator
+        self._runner = runner
+        self._evaluator = evaluator
         self._progress = progress_callback
         self._human_input = human_input_callback
-        self._analyzer = PageAnalyzer(config)
-        self._generator = ScriptGenerator(config)
-        self._runner = ScriptRunner()
-        self._evaluator = ResultEvaluator(config)
+        self._feedback: str | None = None
 
     def execute(
         self,
@@ -50,7 +51,9 @@ class TrialLoop:
         stagnation_count = 0
 
         for round_num in range(1, MAX_ROUNDS + 1):
-            script = self._generator.generate(analysis, query, url)
+            script = self._generator.generate(
+                analysis, query, url, feedback=self._feedback
+            )
             run_result = self._runner.run(script.code)
 
             if not run_result.success:
@@ -63,7 +66,6 @@ class TrialLoop:
                     result = self._handle_stagnation(round_num, [run_result.error or "未知错误"])
                     if result is not None:
                         return result
-                    # Human gave input — reset stagnation and continue
                     stagnation_count = 0
                     last_issues_key = None
                 continue
@@ -90,7 +92,6 @@ class TrialLoop:
                 result = self._handle_stagnation(round_num, evaluation.issues)
                 if result is not None:
                     return result
-                # Human gave input — reset stagnation and continue
                 stagnation_count = 0
                 last_issues_key = None
 
@@ -113,8 +114,9 @@ class TrialLoop:
             )
 
         self._report_progress(round_num, "停滞检测，请求人工介入...")
-        self._human_input(issues)
-        # Human provided input — loop will continue with fresh stagnation count
+        guidance = self._human_input(issues)
+        if guidance:
+            self._feedback = guidance
         return None
 
     @staticmethod

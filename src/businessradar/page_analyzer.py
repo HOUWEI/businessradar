@@ -2,24 +2,20 @@
 
 import json
 
-from businessradar.config import Config
+from businessradar.llm_client import LLMClient
 from businessradar.models import PageAnalysis
 
 
 class PageAnalyzer:
     """Analyze page HTML via LLM to extract structure information."""
 
-    def __init__(self, config: Config) -> None:
-        self._config = config
+    def __init__(self, llm_client: LLMClient) -> None:
+        self._llm = llm_client
 
     def analyze(self, html: str, user_query: str) -> PageAnalysis:
-        """Analyze HTML structure and return a PageAnalysis.
-
-        Sends the HTML and user query to an LLM, asking it to identify
-        list item selectors, field mappings, and page type.
-        """
+        """Analyze HTML structure and return a PageAnalysis."""
         prompt = self._build_prompt(html, user_query)
-        response = self._call_llm(prompt)
+        response = self._llm.call(prompt)
         return self._parse_response(response)
 
     def _build_prompt(self, html: str, user_query: str) -> str:
@@ -40,10 +36,6 @@ class PageAnalyzer:
             "  - 如无筛选需求则为 null\n\n"
             "HTML:\n{html}"
         ).format(query=user_query, html=html)
-
-    def _call_llm(self, prompt: str) -> str:
-        """Call the configured LLM. To be implemented with real provider."""
-        raise NotImplementedError("LLM provider integration not yet implemented")
 
     def _parse_response(self, response: str) -> PageAnalysis:
         """Parse LLM JSON response into PageAnalysis."""

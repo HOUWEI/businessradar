@@ -6,13 +6,24 @@ from typing import Optional
 import typer
 
 from businessradar.config import Config, load_config
+from businessradar.llm_client import LLMClient, StubLLMClient
+from businessradar.page_analyzer import PageAnalyzer
 from businessradar.page_fetcher import PageFetcher
+from businessradar.result_evaluator import ResultEvaluator
+from businessradar.script_generator import ScriptGenerator
+from businessradar.script_runner import ScriptRunner
 from businessradar.trial_loop import TrialLoop
 
 app = typer.Typer(
     name="businessradar",
     help="招投标信息智能提取工具 — LLM 驱动的自动脚本生成",
 )
+
+
+def _create_llm_client(config: Config) -> LLMClient:
+    """Create an LLM client from config. Placeholder until provider integration."""
+    # TODO: replace with RealLLMClient(config) once provider is integrated
+    return StubLLMClient("")
 
 
 @app.command()
@@ -36,9 +47,15 @@ def extract(
         config_path=config_path,
     )
 
+    llm = _create_llm_client(config)
+    analyzer = PageAnalyzer(llm)
+    generator = ScriptGenerator(llm, max_pages=config.max_pages)
+    runner = ScriptRunner()
+    evaluator = ResultEvaluator(llm)
+
     fetcher = PageFetcher(config)
     loop = TrialLoop(
-        config,
+        analyzer, generator, runner, evaluator,
         progress_callback=_print_progress,
         human_input_callback=_human_input,
     )

@@ -1,34 +1,44 @@
 """ScriptGenerator — generates runnable Python scripts from PageAnalysis."""
 
-from businessradar.config import Config
+from businessradar.llm_client import LLMClient
 from businessradar.models import GeneratedScript, PageAnalysis
 
 
 class ScriptGenerator:
     """Generate a Playwright + BeautifulSoup4 script from page analysis."""
 
-    def __init__(self, config: Config) -> None:
-        self._config = config
+    def __init__(self, llm_client: LLMClient, max_pages: int = 50) -> None:
+        self._llm = llm_client
+        self._max_pages = max_pages
 
     def generate(
-        self, analysis: PageAnalysis, user_query: str, url: str
+        self,
+        analysis: PageAnalysis,
+        user_query: str,
+        url: str,
+        feedback: str | None = None,
     ) -> GeneratedScript:
-        """Generate a Python scraping script based on the page analysis.
-
-        Sends the analysis, user query, and URL to an LLM to generate
-        a complete, runnable Python script.
-        """
-        prompt = self._build_prompt(analysis, user_query, url)
-        code = self._call_llm(prompt)
+        """Generate a Python scraping script based on the page analysis."""
+        prompt = self._build_prompt(analysis, user_query, url, feedback)
+        code = self._llm.call(prompt)
         return GeneratedScript(code=code)
 
     def _build_prompt(
-        self, analysis: PageAnalysis, user_query: str, url: str
+        self,
+        analysis: PageAnalysis,
+        user_query: str,
+        url: str,
+        feedback: str | None = None,
     ) -> str:
         pagination_section = self._format_pagination(
-            analysis.pagination, self._config.max_pages
+            analysis.pagination, self._max_pages
         )
         filter_section = self._format_filter_params(analysis.filter_params)
+        feedback_section = (
+            f"\n上一次尝试的反馈：{feedback}\n请根据反馈调整脚本。\n"
+            if feedback
+            else ""
+        )
         return (
             "根据以下页面分析结果，生成一个 Python 数据抓取脚本。\n\n"
             "要求：\n"
@@ -41,6 +51,7 @@ class ScriptGenerator:
             "- 页面类型: {page_type}\n"
             "{pagination}"
             "{filter}"
+            "{feedback}"
             "只返回 Python 代码，不要其他内容。"
         ).format(
             url=url,
@@ -50,6 +61,7 @@ class ScriptGenerator:
             page_type=analysis.page_type,
             pagination=pagination_section,
             filter=filter_section,
+            feedback=feedback_section,
         )
 
     @staticmethod
@@ -80,7 +92,3 @@ class ScriptGenerator:
             f"- 筛选参数: {filter_params.params}\n"
             "- 脚本应全量抓取后本地过滤数据\n"
         )
-
-    def _call_llm(self, prompt: str) -> str:
-        """Call the configured LLM. To be implemented with real provider."""
-        raise NotImplementedError("LLM provider integration not yet implemented")

@@ -1,15 +1,10 @@
 """Tests for ResultEvaluator — two-phase evaluation of extraction results."""
 
 import json
-from unittest.mock import MagicMock, patch
 
-from businessradar.config import Config
-from businessradar.models import Evaluation, PageAnalysis
+from businessradar.llm_client import StubLLMClient
+from businessradar.models import PageAnalysis
 from businessradar.result_evaluator import ResultEvaluator
-
-
-def _make_config() -> Config:
-    return Config(api_key="test-key")
 
 
 def _make_analysis(**overrides) -> PageAnalysis:
@@ -26,29 +21,27 @@ class TestStructureValidation:
     """Structure checks: empty data, missing/null core fields."""
 
     def test_empty_data_fails_structure(self) -> None:
-        evaluator = ResultEvaluator(_make_config())
+        evaluator = ResultEvaluator(StubLLMClient(""))
         result = evaluator.evaluate([], "昨天的信息化采购公告", _make_analysis())
 
         assert result.structure_ok is False
         assert "数据为空" in result.issues
 
     def test_missing_core_field_fails_structure(self) -> None:
-        # data has title and link but no date
         data = [
             {"title": "测试公告", "link": "https://example.com/1"},
         ]
-        evaluator = ResultEvaluator(_make_config())
+        evaluator = ResultEvaluator(StubLLMClient(""))
         result = evaluator.evaluate(data, "昨天的信息化采购公告", _make_analysis())
 
         assert result.structure_ok is False
         assert any("'date' 缺失" in issue for issue in result.issues)
 
     def test_null_core_field_fails_structure(self) -> None:
-        # date field exists but is None
         data = [
             {"title": "测试公告", "date": None, "link": "https://example.com/1"},
         ]
-        evaluator = ResultEvaluator(_make_config())
+        evaluator = ResultEvaluator(StubLLMClient(""))
         result = evaluator.evaluate(data, "昨天的信息化采购公告", _make_analysis())
 
         assert result.structure_ok is False
@@ -56,7 +49,7 @@ class TestStructureValidation:
 
 
 class TestSemanticValidation:
-    """Semantic checks via mocked LLM: data matches user query or not."""
+    """Semantic checks via stub LLM: data matches user query or not."""
 
     def _valid_data(self) -> list[dict]:
         return [
@@ -67,10 +60,9 @@ class TestSemanticValidation:
             }
         ]
 
-    @patch.object(ResultEvaluator, "_call_llm")
-    def test_semantic_ok_when_llm_confirms_match(self, mock_llm: MagicMock) -> None:
-        mock_llm.return_value = json.dumps({"matches": True, "reason": ""})
-        evaluator = ResultEvaluator(_make_config())
+    def test_semantic_ok_when_llm_confirms_match(self) -> None:
+        stub = StubLLMClient(json.dumps({"matches": True, "reason": ""}))
+        evaluator = ResultEvaluator(stub)
         result = evaluator.evaluate(
             self._valid_data(), "昨天的信息化采购公告", _make_analysis()
         )
@@ -79,12 +71,11 @@ class TestSemanticValidation:
         assert result.semantic_ok is True
         assert result.issues == []
 
-    @patch.object(ResultEvaluator, "_call_llm")
-    def test_semantic_fail_when_llm_says_no_match(self, mock_llm: MagicMock) -> None:
-        mock_llm.return_value = json.dumps(
+    def test_semantic_fail_when_llm_says_no_match(self) -> None:
+        stub = StubLLMClient(json.dumps(
             {"matches": False, "reason": "返回的日期为 2026-06-01，但用户要求昨天的数据"}
-        )
-        evaluator = ResultEvaluator(_make_config())
+        ))
+        evaluator = ResultEvaluator(stub)
         result = evaluator.evaluate(
             self._valid_data(), "昨天的信息化采购公告", _make_analysis()
         )

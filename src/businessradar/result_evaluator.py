@@ -2,7 +2,7 @@
 
 import json
 
-from businessradar.config import Config
+from businessradar.llm_client import LLMClient
 from businessradar.models import Evaluation, PageAnalysis
 
 CORE_FIELDS = ("title", "date", "link")
@@ -11,8 +11,8 @@ CORE_FIELDS = ("title", "date", "link")
 class ResultEvaluator:
     """Evaluate extraction results in two phases: structure then semantic."""
 
-    def __init__(self, config: Config) -> None:
-        self._config = config
+    def __init__(self, llm_client: LLMClient) -> None:
+        self._llm = llm_client
 
     def evaluate(
         self,
@@ -78,7 +78,7 @@ class ResultEvaluator:
     ) -> tuple[bool, list[str], list[str]]:
         """Phase 2: semantic validation via LLM."""
         prompt = self._build_semantic_prompt(data, user_query)
-        response = self._call_llm(prompt)
+        response = self._llm.call(prompt)
         return self._parse_semantic_response(response)
 
     def _build_semantic_prompt(self, data: list[dict], user_query: str) -> str:
@@ -88,10 +88,6 @@ class ResultEvaluator:
             "抓取数据：\n{data}\n\n"
             "请返回 JSON：{{\"matches\": true/false, \"reason\": \"不匹配的原因\"}}"
         ).format(query=user_query, data=json.dumps(data[:5], ensure_ascii=False))
-
-    def _call_llm(self, prompt: str) -> str:
-        """Call the configured LLM. To be implemented with real provider."""
-        raise NotImplementedError("LLM provider integration not yet implemented")
 
     def _parse_semantic_response(
         self, response: str
