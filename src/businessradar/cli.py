@@ -1,8 +1,13 @@
 """CLI entry point for BusinessRadar."""
 
+import json
 from typing import Optional
 
 import typer
+
+from businessradar.config import Config, load_config
+from businessradar.page_fetcher import PageFetcher
+from businessradar.trial_loop import TrialLoop
 
 app = typer.Typer(
     name="businessradar",
@@ -18,10 +23,39 @@ def extract(
     api_key: Optional[str] = typer.Option(None, "--api-key", help="LLM API key"),
     max_retries: Optional[int] = typer.Option(None, "--max-retries", help="试错上限"),
     max_pages: Optional[int] = typer.Option(None, "--max-pages", help="翻页上限"),
+    config_path: Optional[str] = typer.Option(None, "--config-path", help="配置文件路径"),
 ) -> None:
     """从给定的 URL 提取招投标信息。"""
-    typer.echo("Not implemented yet.")
+    config = load_config(
+        cli_overrides={
+            "llm_model": model,
+            "api_key": api_key,
+            "max_retries": max_retries,
+            "max_pages": max_pages,
+        },
+        config_path=config_path,
+    )
+
+    fetcher = PageFetcher(config)
+    loop = TrialLoop(config, progress_callback=_print_progress)
+
+    # 1. Fetch page HTML
+    fetch_result = fetcher.fetch(url)
+
+    # 2. Run trial loop: analyze → generate → run → evaluate (with retry)
+    result = loop.execute(url, query, fetch_result)
+
+    if result.success:
+        typer.echo(json.dumps(result.data, ensure_ascii=False))
+    else:
+        typer.echo(f"Error: {result.error}", err=True)
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
     app()
+
+
+def _print_progress(round_num: int, message: str) -> None:
+    """Display trial loop progress to the terminal."""
+    typer.echo(f"[第 {round_num} 轮] {message}", err=True)

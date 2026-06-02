@@ -76,3 +76,48 @@ class TestCLIDefaults:
         config = load_config(config_path=str(config_file))
 
         assert config.proxy is None
+
+
+class TestExtractEndToEnd:
+    """CLI extract command wires PageFetcher + TrialLoop and outputs JSON."""
+
+    def test_extract_outputs_json(self, tmp_path) -> None:
+        import json
+        from unittest.mock import patch
+
+        from businessradar.cli import app
+        from businessradar.config import Config
+        from businessradar.models import FetchResult, RunResult
+
+        mock_config = Config(api_key="sk-test")
+        mock_data = [
+            {"title": "测试公告", "date": "2026-06-01", "link": "https://example.com/1"}
+        ]
+
+        with (
+            patch("businessradar.cli.PageFetcher") as MockFetcher,
+            patch("businessradar.cli.TrialLoop") as MockLoop,
+            patch("businessradar.cli.load_config") as mock_load,
+        ):
+            mock_load.return_value = mock_config
+            MockFetcher.return_value.fetch.return_value = FetchResult(
+                html="<html>list page</html>"
+            )
+            MockLoop.return_value.execute.return_value = RunResult(
+                success=True, data=mock_data
+            )
+
+            result = runner.invoke(
+                app,
+                [
+                    "--url",
+                    "https://example.com/list",
+                    "--query",
+                    "昨天的信息化采购公告",
+                ],
+            )
+
+        assert result.exit_code == 0
+        output_data = json.loads(result.output.strip())
+        assert len(output_data) == 1
+        assert output_data[0]["title"] == "测试公告"
