@@ -37,7 +37,11 @@ def extract(
     )
 
     fetcher = PageFetcher(config)
-    loop = TrialLoop(config, progress_callback=_print_progress)
+    loop = TrialLoop(
+        config,
+        progress_callback=_print_progress,
+        human_input_callback=_human_input,
+    )
 
     # 1. Fetch page HTML
     fetch_result = fetcher.fetch(url)
@@ -59,3 +63,11 @@ if __name__ == "__main__":
 def _print_progress(round_num: int, message: str) -> None:
     """Display trial loop progress to the terminal."""
     typer.echo(f"[第 {round_num} 轮] {message}", err=True)
+
+
+def _human_input(issues: list[str]) -> str:
+    """Prompt user for guidance when trial loop stagnates."""
+    typer.echo("\n⚠️  试错循环停滞，需要你的指导：", err=True)
+    for issue in issues:
+        typer.echo(f"  - {issue}", err=True)
+    return typer.prompt("请输入修改建议（直接回车跳过）")

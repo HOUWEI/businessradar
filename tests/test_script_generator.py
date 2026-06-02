@@ -191,3 +191,25 @@ class TestScriptGeneratorFilterParams:
         prompt = mock_llm.call_args[0][0]
         # Should mention local filtering as fallback
         assert "本地" in prompt or "local" in prompt or "过滤" in prompt
+
+
+class TestScriptGeneratorMaxPagesFromConfig:
+    """max_pages should come from config, not hardcoded."""
+
+    @patch("businessradar.script_generator.ScriptGenerator._call_llm")
+    def test_uses_config_max_pages(self, mock_llm: MagicMock) -> None:
+        mock_llm.return_value = MOCK_LLM_SCRIPT
+
+        analysis = PageAnalysis(
+            list_item_selector="div.vT-s-result",
+            fields={"title": "a.title", "date": "span.date", "link": "a.title@href"},
+            page_type="static",
+            pagination=PaginationInfo(type="url_param", param_name="page"),
+        )
+        config = Config(api_key="test-key", max_pages=20)
+        gen = ScriptGenerator(config)
+        gen.generate(analysis, "昨天的信息化采购公告", "https://example.com/list")
+
+        prompt = mock_llm.call_args[0][0]
+        assert "20 页" in prompt
+        assert "50 页" not in prompt

@@ -25,7 +25,9 @@ class ScriptGenerator:
     def _build_prompt(
         self, analysis: PageAnalysis, user_query: str, url: str
     ) -> str:
-        pagination_section = self._format_pagination(analysis.pagination)
+        pagination_section = self._format_pagination(
+            analysis.pagination, self._config.max_pages
+        )
         filter_section = self._format_filter_params(analysis.filter_params)
         return (
             "根据以下页面分析结果，生成一个 Python 数据抓取脚本。\n\n"
@@ -51,7 +53,7 @@ class ScriptGenerator:
         )
 
     @staticmethod
-    def _format_pagination(pagination) -> str:
+    def _format_pagination(pagination, max_pages: int = 50) -> str:
         if pagination is None:
             return ""
         return (
@@ -60,7 +62,7 @@ class ScriptGenerator:
             f"selector={pagination.selector}\n"
             "- 脚本必须包含翻页循环，自动抓取后续页面\n"
             "- 语义终止：根据用户查询推断何时停止翻页\n"
-            "- 硬上限：最多 50 页\n"
+            f"- 硬上限：最多 {max_pages} 页\n"
         )
 
     @staticmethod
