@@ -100,3 +100,42 @@ class TestRandomDelay:
         fetcher.fetch("https://example.com")
 
         mock_sleep.assert_called_once_with(0.0)
+
+
+class TestProxySupport:
+    """Static requests respect proxy config."""
+
+    @patch("businessradar.page_fetcher.urllib.request.build_opener")
+    def test_uses_proxy_when_configured(self, mock_build_opener: MagicMock) -> None:
+        mock_opener = MagicMock()
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"<html>proxied</html>"
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_opener.open.return_value = mock_response
+        mock_build_opener.return_value = mock_opener
+
+        config = Config(api_key="test-key", proxy="http://proxy:8080")
+        fetcher = PageFetcher(config, delay_range=(0, 0))
+        result = fetcher.fetch("https://example.com")
+
+        assert result.used_browser is False
+        assert "proxied" in result.html
+        # ProxyHandler should be passed to build_opener
+        build_args = mock_build_opener.call_args[0]
+        assert len(build_args) == 1  # ProxyHandler instance
+
+    @patch("businessradar.page_fetcher.urllib.request.urlopen")
+    def test_no_proxy_uses_direct_urlopen(self, mock_urlopen: MagicMock) -> None:
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"<html>direct</html>"
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        config = Config(api_key="test-key", proxy=None)
+        fetcher = PageFetcher(config, delay_range=(0, 0))
+        result = fetcher.fetch("https://example.com")
+
+        assert result.used_browser is False
+        mock_urlopen.assert_called_once()

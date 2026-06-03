@@ -46,8 +46,16 @@ class PageFetcher:
         """Static HTTP GET via urllib with random UA and delay."""
         time.sleep(random.uniform(*self._delay_range))
         req = urllib.request.Request(url, headers={"User-Agent": random.choice(_USER_AGENTS)})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return resp.read().decode("utf-8", errors="replace")
+
+        if self._config.proxy:
+            opener = urllib.request.build_opener(
+                urllib.request.ProxyHandler({"http": self._config.proxy, "https": self._config.proxy})
+            )
+            with opener.open(req, timeout=30) as resp:
+                return resp.read().decode("utf-8", errors="replace")
+        else:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return resp.read().decode("utf-8", errors="replace")
 
     def _fetch_browser(self, url: str) -> str:
         """Browser-based fetch via Playwright (placeholder for Issue #5+)."""
