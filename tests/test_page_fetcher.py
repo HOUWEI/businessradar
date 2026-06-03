@@ -45,3 +45,58 @@ class TestPageFetcherBrowserEscalation:
         assert result.used_browser is True
         assert "dynamic" in result.html
         mock_browser.assert_called_once_with("https://example.com/list")
+
+
+class TestRandomUserAgent:
+    """Each request uses a random User-Agent from a pool."""
+
+    @patch("businessradar.page_fetcher.random.choice")
+    @patch("businessradar.page_fetcher.urllib.request.urlopen")
+    def test_uses_random_user_agent(self, mock_urlopen: MagicMock, mock_choice: MagicMock) -> None:
+        mock_choice.return_value = "TestAgent/1.0"
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"<html>ok</html>"
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        fetcher = PageFetcher(_make_config(), delay_range=(0, 0))
+        fetcher.fetch("https://example.com")
+
+        mock_choice.assert_called_once()
+        ua = mock_urlopen.call_args[0][0].get_header("User-agent")
+        assert ua == "TestAgent/1.0"
+
+
+class TestRandomDelay:
+    """Requests have random delay to avoid rate-limiting."""
+
+    @patch("businessradar.page_fetcher.time.sleep")
+    @patch("businessradar.page_fetcher.urllib.request.urlopen")
+    def test_adds_random_delay(self, mock_urlopen: MagicMock, mock_sleep: MagicMock) -> None:
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"<html>ok</html>"
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        fetcher = PageFetcher(_make_config())
+        fetcher.fetch("https://example.com")
+
+        mock_sleep.assert_called_once()
+        delay = mock_sleep.call_args[0][0]
+        assert 1.0 <= delay <= 3.0
+
+    @patch("businessradar.page_fetcher.time.sleep")
+    @patch("businessradar.page_fetcher.urllib.request.urlopen")
+    def test_delay_respects_configurable_range(self, mock_urlopen: MagicMock, mock_sleep: MagicMock) -> None:
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"<html>ok</html>"
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        fetcher = PageFetcher(_make_config(), delay_range=(0, 0))
+        fetcher.fetch("https://example.com")
+
+        mock_sleep.assert_called_once_with(0.0)
