@@ -6,7 +6,7 @@ from typing import Optional
 import typer
 
 from businessradar.config import Config, load_config
-from businessradar.llm_client import LLMClient, StubLLMClient
+from businessradar.llm_client import LLMClient, RealLLMClient, StubLLMClient
 from businessradar.page_analyzer import PageAnalyzer
 from businessradar.page_fetcher import PageFetcher
 from businessradar.result_evaluator import ResultEvaluator
@@ -21,9 +21,12 @@ app = typer.Typer(
 
 
 def _create_llm_client(config: Config) -> LLMClient:
-    """Create an LLM client from config. Placeholder until provider integration."""
-    # TODO: replace with RealLLMClient(config) once provider is integrated
-    return StubLLMClient("")
+    """Create an LLM client from config — uses RealLLMClient for production."""
+    return RealLLMClient(
+        api_key=config.api_key,
+        model=config.llm_model,
+        base_url=config.llm_base_url,
+    )
 
 
 @app.command()
@@ -34,6 +37,7 @@ def extract(
     api_key: Optional[str] = typer.Option(None, "--api-key", help="LLM API key"),
     max_retries: Optional[int] = typer.Option(None, "--max-retries", help="试错上限"),
     max_pages: Optional[int] = typer.Option(None, "--max-pages", help="翻页上限"),
+    base_url: Optional[str] = typer.Option(None, "--base-url", help="LLM API base URL (OpenAI 兼容)"),
     config_path: Optional[str] = typer.Option(None, "--config-path", help="配置文件路径"),
 ) -> None:
     """从给定的 URL 提取招投标信息。"""
@@ -43,6 +47,7 @@ def extract(
             "api_key": api_key,
             "max_retries": max_retries,
             "max_pages": max_pages,
+            "llm_base_url": base_url,
         },
         config_path=config_path,
     )

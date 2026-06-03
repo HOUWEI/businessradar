@@ -17,6 +17,7 @@ class Config(BaseModel):
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o"
     api_key: str = ""
+    llm_base_url: str | None = None
     max_retries: int = 10
     max_pages: int = 50
     proxy: str | None = None
