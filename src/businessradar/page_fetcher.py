@@ -3,9 +3,15 @@
 import random
 import time
 import urllib.request
+from typing import Any
 
 from businessradar.config import Config
 from businessradar.models import FetchResult
+
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    sync_playwright = None  # type: ignore[assignment]
 
 # Pool of realistic User-Agent strings for anti-detection rotation
 _USER_AGENTS = [
@@ -32,15 +38,38 @@ class PageFetcher:
     ) -> None:
         self._config = config
         self._delay_range = delay_range
+        self._playwright: Any = None
+        self._browser: Any = None
+        self._page: Any = None
 
     def fetch(self, url: str) -> FetchResult:
         """Fetch HTML from url. Try static first; fall back to browser on failure."""
         try:
             html = self._fetch_static(url)
+            if not html.strip():
+                # Empty response → escalate to browser
+                html = self._fetch_browser(url)
+                return FetchResult(html=html, used_browser=True)
             return FetchResult(html=html, used_browser=False)
         except Exception:
             html = self._fetch_browser(url)
             return FetchResult(html=html, used_browser=True)
+
+    def screenshot(self) -> bytes:
+        """Take a screenshot of the current browser page. Must call _fetch_browser first."""
+        if self._page is None:
+            raise RuntimeError("No browser page available. Call _fetch_browser first.")
+        return self._page.screenshot()
+
+    def close(self) -> None:
+        """Shut down the browser and Playwright instance."""
+        if self._browser is not None:
+            self._browser.close()
+            self._browser = None
+        if self._playwright is not None:
+            self._playwright.stop()
+            self._playwright = None
+        self._page = None
 
     def _fetch_static(self, url: str) -> str:
         """Static HTTP GET via urllib with random UA and delay."""
@@ -58,5 +87,18 @@ class PageFetcher:
                 return resp.read().decode("utf-8", errors="replace")
 
     def _fetch_browser(self, url: str) -> str:
-        """Browser-based fetch via Playwright (placeholder for Issue #5+)."""
-        raise NotImplementedError("Browser fetch not yet implemented")
+        """Browser-based fetch via Playwright for JS-rendered pages."""
+        if self._playwright is None:
+            if sync_playwright is None:
+                raise NotImplementedError(
+                    "Playwright is not installed. Run: pip install playwright && playwright install"
+                )
+            self._playwright = sync_playwright().start()
+            launch_opts: dict = {}
+            if self._config.proxy:
+                launch_opts["proxy"] = {"server": self._config.proxy}
+            self._browser = self._playwright.chromium.launch(**launch_opts)
+            self._page = self._browser.new_page()
+
+        self._page.goto(url, wait_until="networkidle")
+        return self._page.content()

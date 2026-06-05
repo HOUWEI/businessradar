@@ -139,3 +139,86 @@ class TestProxySupport:
 
         assert result.used_browser is False
         mock_urlopen.assert_called_once()
+
+
+class TestBrowserFetch:
+    """Playwright browser fetch via sync_playwright."""
+
+    @patch("businessradar.page_fetcher.sync_playwright")
+    def test_browser_fetch_returns_html(self, mock_pw_func: MagicMock) -> None:
+        mock_pw = MagicMock()
+        mock_pw_func.return_value.start.return_value = mock_pw
+
+        mock_browser = MagicMock()
+        mock_pw.chromium.launch.return_value = mock_browser
+        mock_page = MagicMock()
+        mock_page.content.return_value = "<html><body>Dynamic</body></html>"
+        mock_browser.new_page.return_value = mock_page
+
+        fetcher = PageFetcher(_make_config(), delay_range=(0, 0))
+        html = fetcher._fetch_browser("https://example.com")
+
+        assert "Dynamic" in html
+        mock_page.goto.assert_called_once_with("https://example.com", wait_until="networkidle")
+
+    @patch("businessradar.page_fetcher.sync_playwright")
+    def test_screenshot_captures_page(self, mock_pw_func: MagicMock) -> None:
+        mock_pw = MagicMock()
+        mock_pw_func.return_value.start.return_value = mock_pw
+
+        mock_browser = MagicMock()
+        mock_pw.chromium.launch.return_value = mock_browser
+        mock_page = MagicMock()
+        mock_page.screenshot.return_value = b"\x89PNG fake screenshot data"
+        mock_browser.new_page.return_value = mock_page
+
+        fetcher = PageFetcher(_make_config(), delay_range=(0, 0))
+        fetcher._fetch_browser("https://example.com")  # init browser
+        screenshot = fetcher.screenshot()
+
+        assert screenshot == b"\x89PNG fake screenshot data"
+        mock_page.screenshot.assert_called_once()
+
+    def test_close_shuts_down_browser(self) -> None:
+        fetcher = PageFetcher(_make_config())
+        mock_browser = MagicMock()
+        fetcher._browser = mock_browser
+
+        fetcher.close()
+
+        mock_browser.close.assert_called_once()
+        assert fetcher._browser is None
+
+
+class TestEscalationTriggers:
+    """Static requests that should trigger browser escalation."""
+
+    @patch.object(PageFetcher, "_fetch_browser", return_value="<html>dynamic</html>")
+    @patch("businessradar.page_fetcher.urllib.request.urlopen")
+    def test_escalates_on_403(self, mock_urlopen: MagicMock, mock_browser: MagicMock) -> None:
+        import urllib.error
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="https://example.com", code=403, msg="Forbidden",
+            hdrs=None, fp=None,
+        )
+
+        fetcher = PageFetcher(_make_config(), delay_range=(0, 0))
+        result = fetcher.fetch("https://example.com")
+
+        assert result.used_browser is True
+        mock_browser.assert_called_once()
+
+    @patch.object(PageFetcher, "_fetch_browser", return_value="<html>dynamic</html>")
+    @patch("businessradar.page_fetcher.urllib.request.urlopen")
+    def test_escalates_on_empty_response(self, mock_urlopen: MagicMock, mock_browser: MagicMock) -> None:
+        mock_response = MagicMock()
+        mock_response.read.return_value = b""
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        fetcher = PageFetcher(_make_config(), delay_range=(0, 0))
+        result = fetcher.fetch("https://example.com")
+
+        assert result.used_browser is True
+        mock_browser.assert_called_once()

@@ -30,6 +30,7 @@ class TrialLoop:
         evaluator: ResultEvaluator,
         progress_callback: ProgressCallback | None = None,
         human_input_callback: HumanInputCallback | None = None,
+        captcha_handler: "CaptchaHandler | None" = None,
     ) -> None:
         self._analyzer = analyzer
         self._generator = generator
@@ -37,6 +38,7 @@ class TrialLoop:
         self._evaluator = evaluator
         self._progress = progress_callback
         self._human_input = human_input_callback
+        self._captcha_handler = captcha_handler
         self._feedback: str | None = None
 
     def execute(
@@ -102,6 +104,39 @@ class TrialLoop:
                 )
 
         return RunResult(success=False, error="试错循环异常终止")
+
+    def handle_captcha(self, page_fetcher: "PageFetcher") -> RunResult | None:
+        """Check for captcha on the current browser page and attempt to solve.
+
+        Returns None if no captcha detected, RunResult with error if unsolvable,
+        or None if captcha was solved (caller should retry fetch).
+        """
+        if self._captcha_handler is None:
+            return None
+
+        from businessradar.captcha_handler import CaptchaHandler
+        from businessradar.models import SolveResult
+
+        try:
+            screenshot = page_fetcher.screenshot()
+        except RuntimeError:
+            return None
+
+        solve_result = self._captcha_handler.detect_and_solve(screenshot)
+
+        if solve_result.success and solve_result.answer is None:
+            # No captcha detected
+            return None
+
+        if not solve_result.success:
+            # Unsolvable captcha — report to user
+            return RunResult(
+                success=False,
+                error=f"验证码无法自动处理: {solve_result.error}。请手动处理后重试。",
+            )
+
+        # Captcha solved — answer is available for the caller to use
+        return None
 
     def _handle_stagnation(
         self, round_num: int, issues: list[str]

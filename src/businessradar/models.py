@@ -58,3 +58,19 @@ class Evaluation(BaseModel):
     semantic_ok: bool
     issues: list[str] = []
     suggestions: list[str] = []
+
+
+class CaptchaType(BaseModel):
+    """Detected captcha type from LLM visual analysis."""
+
+    kind: Literal["text", "arithmetic", "slider", "point_select", "recaptcha", "hcaptcha", "sms", "none"]
+    confidence: float = 0.0
+    description: str = ""
+
+
+class SolveResult(BaseModel):
+    """Result of attempting to solve a captcha."""
+
+    success: bool
+    answer: str | None = None
+    error: str | None = None
