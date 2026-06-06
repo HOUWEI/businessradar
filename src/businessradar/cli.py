@@ -65,10 +65,20 @@ def extract(
     evaluator = ResultEvaluator(llm)
 
     fetcher = PageFetcher(config)
+
+    # Build LLM env vars so generated scripts can call LLM for captcha solving
+    llm_env: dict[str, str] = {
+        "BUSINESSRADAR_LLM_API_KEY": config.api_key,
+        "BUSINESSRADAR_LLM_MODEL": config.llm_model,
+    }
+    if config.llm_base_url:
+        llm_env["BUSINESSRADAR_LLM_BASE_URL"] = config.llm_base_url
+
     loop = TrialLoop(
         analyzer, generator, runner, evaluator,
         progress_callback=_print_progress,
         human_input_callback=_human_input,
+        llm_env=llm_env,
     )
 
     # 1. Fetch page HTML

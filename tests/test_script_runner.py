@@ -50,3 +50,31 @@ class TestScriptRunnerTimeout:
         assert result.data is None
         assert result.error is not None
         assert "timed out" in result.error
+
+
+class TestScriptRunnerEnvVars:
+    """ScriptRunner passes env vars to subprocess."""
+
+    def test_env_vars_available_in_subprocess(self) -> None:
+        script = (
+            "import json, os\n"
+            "data = [{'key': os.environ.get('TEST_BR_VAR', 'missing')}]\n"
+            "print(json.dumps(data, ensure_ascii=False))\n"
+        )
+        runner = ScriptRunner()
+        result = runner.run(script, env={"TEST_BR_VAR": "hello"})
+
+        assert result.success is True
+        assert result.data is not None
+        assert result.data[0]["key"] == "hello"
+
+    def test_no_env_still_works(self) -> None:
+        script = (
+            "import json\n"
+            "print(json.dumps([{'ok': True}]))\n"
+        )
+        runner = ScriptRunner()
+        result = runner.run(script)
+
+        assert result.success is True
+        assert result.data is not None

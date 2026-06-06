@@ -31,6 +31,7 @@ class TrialLoop:
         progress_callback: ProgressCallback | None = None,
         human_input_callback: HumanInputCallback | None = None,
         captcha_handler: "CaptchaHandler | None" = None,
+        llm_env: dict[str, str] | None = None,
     ) -> None:
         self._analyzer = analyzer
         self._generator = generator
@@ -39,6 +40,7 @@ class TrialLoop:
         self._progress = progress_callback
         self._human_input = human_input_callback
         self._captcha_handler = captcha_handler
+        self._llm_env = llm_env
         self._feedback: str | None = None
 
     def execute(
@@ -56,7 +58,7 @@ class TrialLoop:
             script = self._generator.generate(
                 analysis, query, url, feedback=self._feedback
             )
-            run_result = self._runner.run(script.code)
+            run_result = self._runner.run(script.code, env=self._llm_env)
 
             if not run_result.success:
                 self._report_progress(round_num, f"脚本执行失败: {run_result.error}")

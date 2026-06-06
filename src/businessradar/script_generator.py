@@ -3,6 +3,29 @@
 from businessradar.llm_client import LLMClient
 from businessradar.models import GeneratedScript, PageAnalysis
 
+_CAPTCHA_INSTRUCTIONS = """\
+验证码处理（重要）：
+- 如果页面包含验证码（验证码图片、validateCode、captcha 等元素），脚本必须自动处理
+- 使用 openai 库调用 LLM Vision API 识别验证码：
+  import os, base64
+  from openai import OpenAI
+  client = OpenAI(
+      api_key=os.environ.get("BUSINESSRADAR_LLM_API_KEY", ""),
+      base_url=os.environ.get("BUSINESSRADAR_LLM_BASE_URL") or None,
+  )
+  # 截取验证码图片后调用 vision
+  resp = client.chat.completions.create(
+      model=os.environ.get("BUSINESSRADAR_LLM_MODEL", "gpt-4o"),
+      messages=[{"role": "user", "content": [
+          {"type": "text", "text": "识别此验证码图片中的字符，只返回答案不要解释"},
+          {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+      ]}],
+  )
+  code = resp.choices[0].message.content.strip()
+- 在填写搜索表单前先解决验证码，将结果填入验证码输入框
+- 如果验证码提交后仍然失败，刷新验证码图片并重试（最多3次）
+"""
+
 
 class ScriptGenerator:
     """Generate a Playwright + BeautifulSoup4 script from page analysis."""
@@ -51,6 +74,7 @@ class ScriptGenerator:
             "- 页面类型: {page_type}\n"
             "{pagination}"
             "{filter}"
+            "{captcha}"
             "{feedback}"
             "只返回 Python 代码，不要其他内容。"
         ).format(
@@ -61,6 +85,7 @@ class ScriptGenerator:
             page_type=analysis.page_type,
             pagination=pagination_section,
             filter=filter_section,
+            captcha=_CAPTCHA_INSTRUCTIONS,
             feedback=feedback_section,
         )
 

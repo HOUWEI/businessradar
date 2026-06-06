@@ -54,10 +54,12 @@ class MockRunner:
     """Mock ScriptRunner with configurable side effects."""
     results: list[RunResult] = field(default_factory=list)
     call_count: int = 0
+    last_env: dict[str, str] | None = None
 
-    def run(self, script_code, timeout=60):
+    def run(self, script_code, timeout=60, env=None):
         result = self.results[self.call_count] if self.call_count < len(self.results) else self.results[-1]
         self.call_count += 1
+        self.last_env = env
         return result
 
 
@@ -250,3 +252,32 @@ class TestTrialLoopHumanInput:
         assert "date" in human_calls[0]
         # Verify feedback was passed to the generator after human input
         assert generator.last_feedback == "试试用 span.date 选择器"
+
+
+class TestTrialLoopLLMEnv:
+    """TrialLoop passes llm_env to ScriptRunner."""
+
+    def test_passes_llm_env_to_runner(self) -> None:
+        analyzer = MockAnalyzer()
+        generator = MockGenerator()
+        runner = MockRunner(results=[RunResult(success=True, data=MOCK_DATA)])
+        evaluator = MockEvaluator(results=[Evaluation(structure_ok=True, semantic_ok=True)])
+
+        llm_env = {"BUSINESSRADAR_LLM_API_KEY": "sk-test", "BUSINESSRADAR_LLM_MODEL": "gpt-4o"}
+        loop = TrialLoop(analyzer, generator, runner, evaluator, llm_env=llm_env)
+        result = loop.execute("https://example.com", "测试查询", FETCH_RESULT)
+
+        assert result.success is True
+        assert runner.last_env == llm_env
+
+    def test_no_llm_env_passes_none(self) -> None:
+        analyzer = MockAnalyzer()
+        generator = MockGenerator()
+        runner = MockRunner(results=[RunResult(success=True, data=MOCK_DATA)])
+        evaluator = MockEvaluator(results=[Evaluation(structure_ok=True, semantic_ok=True)])
+
+        loop = TrialLoop(analyzer, generator, runner, evaluator)
+        result = loop.execute("https://example.com", "测试查询", FETCH_RESULT)
+
+        assert result.success is True
+        assert runner.last_env is None
