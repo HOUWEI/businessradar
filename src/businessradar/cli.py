@@ -1,6 +1,7 @@
 """CLI entry point for BusinessRadar."""
 
 import json
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -33,6 +34,8 @@ def _create_llm_client(config: Config) -> LLMClient:
 def extract(
     url: str = typer.Option(..., "--url", help="目标列表页 URL"),
     query: str = typer.Option(..., "--query", help="自然语言描述，如'昨天的信息化采购公告'"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="输出 JSON 文件路径（默认输出到 stdout）"),
+    keywords: Optional[str] = typer.Option(None, "--keywords", "-k", help="关键词文件路径（每行一个关键词），自动拼接到 query"),
     model: Optional[str] = typer.Option(None, "--model", help="LLM 模型名称"),
     api_key: Optional[str] = typer.Option(None, "--api-key", help="LLM API key"),
     max_retries: Optional[int] = typer.Option(None, "--max-retries", help="试错上限"),
@@ -41,6 +44,9 @@ def extract(
     config_path: Optional[str] = typer.Option(None, "--config-path", help="配置文件路径"),
 ) -> None:
     """从给定的 URL 提取招投标信息。"""
+    # Merge keywords file into query if provided
+    full_query = _build_query(query, keywords)
+
     config = load_config(
         cli_overrides={
             "llm_model": model,
@@ -69,10 +75,10 @@ def extract(
     fetch_result = fetcher.fetch(url)
 
     # 2. Run trial loop: analyze → generate → run → evaluate (with retry)
-    result = loop.execute(url, query, fetch_result)
+    result = loop.execute(url, full_query, fetch_result)
 
     if result.success:
-        typer.echo(json.dumps(result.data, ensure_ascii=False))
+        _write_result(result.data, output)
     else:
         typer.echo(f"Error: {result.error}", err=True)
         raise typer.Exit(code=1)
@@ -80,6 +86,29 @@ def extract(
 
 if __name__ == "__main__":
     app()
+
+
+def _build_query(query: str, keywords_path: str | None) -> str:
+    """Merge query with keywords from file if provided."""
+    if keywords_path is None:
+        return query
+    path = Path(keywords_path)
+    if not path.exists():
+        raise typer.BadParameter(f"关键词文件不存在: {keywords_path}")
+    keywords = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if not keywords:
+        return query
+    return f"{query}。关键词覆盖：{'、'.join(keywords)}"
+
+
+def _write_result(data: list[dict] | None, output_path: str | None) -> None:
+    """Write JSON result to file or stdout."""
+    json_str = json.dumps(data, ensure_ascii=False, indent=2)
+    if output_path:
+        Path(output_path).write_text(json_str, encoding="utf-8")
+        typer.echo(f"结果已保存到 {output_path}", err=True)
+    else:
+        typer.echo(json_str)
 
 
 def _print_progress(round_num: int, message: str) -> None:
